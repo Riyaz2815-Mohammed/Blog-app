@@ -44,7 +44,9 @@ router.get('/search', auth, async (req, res) => {
 // GET /api/users/:username
 router.get('/:username', auth, async (req, res) => {
   try {
-    const user = await User.findOne({ username: req.params.username });
+    const user = await User.findOne({ username: req.params.username })
+      .populate('followers', 'name username')
+      .populate('following', 'name username');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(safe(user));
   } catch (err) {

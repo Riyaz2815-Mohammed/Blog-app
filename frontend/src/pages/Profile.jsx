@@ -1,8 +1,34 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { getProfile, getUserPosts, followUser, updateMe } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import PostCard from '../components/PostCard.jsx';
+
+function UserListModal({ title, users, onClose }) {
+  return (
+    <div style={s.overlay} onClick={onClose}>
+      <div style={s.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={s.modalHeader}>
+          <span style={s.modalTitle}>{title}</span>
+          <button onClick={onClose} style={s.closeBtn}>✕</button>
+        </div>
+        {users.length === 0 ? (
+          <p style={s.modalEmpty}>Nobody here yet.</p>
+        ) : (
+          users.map((u) => (
+            <Link key={u._id} to={`/profile/${u.username}`} onClick={onClose} style={s.userRow}>
+              <div style={s.rAvatar}>{u.name[0].toUpperCase()}</div>
+              <div>
+                <div style={s.rName}>{u.name}</div>
+                <div style={s.rHandle}>@{u.username}</div>
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Profile() {
   const { username } = useParams();
@@ -13,6 +39,7 @@ export default function Profile() {
   const [editingBio, setEditingBio] = useState(false);
   const [bio, setBio] = useState('');
   const [saving, setSaving] = useState(false);
+  const [modal, setModal] = useState(null); // 'followers' | 'following' | null
 
   const isMe = session.user.username === username;
 
@@ -23,7 +50,7 @@ export default function Profile() {
       .finally(() => setLoading(false));
   }, [username, session.token]);
 
-  const isFollowing = profile?.followers?.includes(session.user._id);
+  const isFollowing = profile?.followers?.some((f) => f._id === session.user._id || f === session.user._id);
 
   const handleFollow = async () => {
     try {
@@ -31,8 +58,8 @@ export default function Profile() {
       setProfile((p) => ({
         ...p,
         followers: res.following
-          ? [...p.followers, session.user._id]
-          : p.followers.filter((id) => id !== session.user._id),
+          ? [...p.followers, { _id: session.user._id, name: session.user.name, username: session.user.username }]
+          : p.followers.filter((f) => (f._id || f) !== session.user._id),
       }));
     } catch {}
   };
@@ -56,6 +83,14 @@ export default function Profile() {
 
   return (
     <div>
+      {modal && (
+        <UserListModal
+          title={modal === 'followers' ? 'Followers' : 'Following'}
+          users={modal === 'followers' ? profile.followers : profile.following}
+          onClose={() => setModal(null)}
+        />
+      )}
+
       {/* Header */}
       <div style={s.header}>
         <div style={s.avatarLg}>{profile.name[0].toUpperCase()}</div>
@@ -63,7 +98,7 @@ export default function Profile() {
           <div style={s.nameRow}>
             <h2 style={s.name}>{profile.name}</h2>
             {!isMe && (
-              <button onClick={handleFollow} style={{ ...(isFollowing ? s.unfollowBtn : s.followBtn) }}>
+              <button onClick={handleFollow} style={isFollowing ? s.unfollowBtn : s.followBtn}>
                 {isFollowing ? 'Unfollow' : 'Follow'}
               </button>
             )}
@@ -87,8 +122,12 @@ export default function Profile() {
 
           <div style={s.stats}>
             <span><strong>{posts.length}</strong> <span style={s.statLabel}>posts</span></span>
-            <span><strong>{profile.followers.length}</strong> <span style={s.statLabel}>followers</span></span>
-            <span><strong>{profile.following.length}</strong> <span style={s.statLabel}>following</span></span>
+            <span style={s.statBtn} onClick={() => setModal('followers')}>
+              <strong>{profile.followers.length}</strong> <span style={s.statLabel}>followers</span>
+            </span>
+            <span style={s.statBtn} onClick={() => setModal('following')}>
+              <strong>{profile.following.length}</strong> <span style={s.statLabel}>following</span>
+            </span>
           </div>
         </div>
       </div>
@@ -118,8 +157,20 @@ const s = {
   editBioLink: { color: 'var(--primary)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 },
   stats: { display: 'flex', gap: '1rem', marginTop: '0.25rem', fontSize: '0.88rem' },
   statLabel: { color: 'var(--muted)' },
+  statBtn: { cursor: 'pointer', borderBottom: '1px dashed var(--border)' },
   followBtn: { background: 'var(--primary)', color: '#fff', fontSize: '0.82rem', padding: '0.3rem 0.9rem' },
   unfollowBtn: { background: 'transparent', color: 'var(--text)', border: '1px solid var(--border)', fontSize: '0.82rem', padding: '0.3rem 0.9rem' },
   postsHeader: { padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)', background: 'var(--surface)' },
   empty: { textAlign: 'center', color: 'var(--muted)', padding: '3rem 1rem', fontSize: '0.9rem' },
+  // Modal
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' },
+  modal: { background: 'var(--surface)', borderRadius: 'var(--radius)', width: '100%', maxWidth: 380, maxHeight: '70vh', overflowY: 'auto' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1rem', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--surface)' },
+  modalTitle: { fontWeight: 700, fontSize: '1rem' },
+  closeBtn: { background: 'transparent', color: 'var(--muted)', fontSize: '1rem', padding: '0.2rem 0.4rem', border: 'none' },
+  modalEmpty: { padding: '2rem', textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' },
+  userRow: { display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1rem', borderBottom: '1px solid var(--border)', color: 'var(--text)' },
+  rAvatar: { width: 38, height: 38, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0 },
+  rName: { fontWeight: 600, fontSize: '0.9rem' },
+  rHandle: { color: 'var(--muted)', fontSize: '0.8rem' },
 };
